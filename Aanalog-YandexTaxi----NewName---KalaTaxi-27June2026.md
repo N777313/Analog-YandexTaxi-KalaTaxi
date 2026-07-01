@@ -175,6 +175,9 @@ Notification Service
 
 
 # ------------------------------------------------------------------------------
+## Вопрос 2
+
+<a id="вопрос-2"></a>
 
 > ![Question](https://img.shields.io/badge/QUESTION-blue)
 >
@@ -403,6 +406,9 @@ OpenTelemetry
 Если вы планируете делать этот проект как серьёзное портфолио, я бы сразу заложил принципы **Clean Architecture**, **DDD (Domain-Driven Design)** и **событийно-ориентированной архитектуры (Event-Driven Architecture)**. Это позволит безболезненно расширять систему по мере добавления новых сервисов и функциональности.
 
 # ------------------------------------------------------------------------------
+## Вопрос 3
+
+<a id="вопрос-3"></a>
 
 > ![Question](https://img.shields.io/badge/QUESTION-blue)
 >
@@ -1119,7 +1125,875 @@ Service   Service    Service     Service   Service   Service
 Такой подход хорошо подходит и для учебного проекта, и как основа для системы, которую можно постепенно усложнять без кардинальной переработки архитектуры.
 
 # ------------------------------------------------------------------------------
+
+## Вопрос 4
+
+<a id="вопрос-4"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> Где все это будет? Внутрий одного docker контейнера?
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+Нет. Наоборот, **каждый сервис должен быть отдельным контейнером**. Это одна из основных идей микросервисной архитектуры.
+
+На этапе разработки все контейнеры будут запускаться одной командой через **Docker Compose**, но внутри будут независимыми процессами.
+
+Например, структура может выглядеть так:
+
+```text
+docker-compose.yml
+
+services/
+│
+├── api-gateway/
+├── user-service/
+├── driver-service/
+├── ride-service/
+├── dispatch-service/
+├── geo-service/
+├── pricing-service/
+├── payment-service/
+├── notification-service/
+├── websocket-service/
+│
+├── kafka-worker-user/
+├── kafka-worker-driver/
+├── kafka-worker-ride/
+├── kafka-worker-dispatch/
+└── kafka-worker-notification/
+
+infrastructure/
+│
+├── nginx/
+├── kafka/
+├── postgres/
+├── redis/
+├── prometheus/
+├── grafana/
+└── otel/
+```
+
+Запущенные контейнеры будут выглядеть примерно так:
+
+```text
++-------------------------------------------------------------+
+|                    Docker Compose Network                   |
+|                                                             |
+|  nginx                                                      |
+|     │                                                       |
+|  api-gateway                                                |
+|     │                                                       |
+| ┌───┴─────────────────────────────────────────────────────┐ |
+| │                                                         │ |
+| │ user-service                                            │ |
+| │ driver-service                                          │ |
+| │ ride-service                                            │ |
+| │ dispatch-service                                        │ |
+| │ geo-service                                             │ |
+| │ pricing-service                                         │ |
+| │ payment-service                                         │ |
+| │ notification-service                                    │ |
+| │ websocket-service                                       │ |
+| │                                                         │ |
+| └─────────────────────────────────────────────────────────┘ |
+|                                                             |
+| kafka                                                      |
+| zookeeper (или KRaft)                                      |
+|                                                             |
+| postgres-user                                              |
+| postgres-driver                                            |
+| postgres-ride                                              |
+| postgres-payment                                           |
+|                                                             |
+| redis                                                      |
+|                                                             |
+| prometheus                                                 |
+| grafana                                                    |
+| otel-collector                                              |
++-------------------------------------------------------------+
+```
+
+## Почему не один контейнер?
+
+Если поместить всё в один контейнер:
+
+* невозможно независимо обновлять сервисы;
+* нельзя масштабировать только один сервис;
+* при падении одного процесса может пострадать всё приложение;
+* исчезает смысл микросервисной архитектуры.
+
+Например, если нагрузка на поиск водителей выросла в 10 раз, можно запустить несколько экземпляров только `dispatch-service`:
+
+```text
+dispatch-service-1
+dispatch-service-2
+dispatch-service-3
+dispatch-service-4
+```
+
+При этом остальные сервисы продолжают работать в одном экземпляре.
+
+## PostgreSQL
+
+Есть два распространённых подхода:
+
+### Вариант 1 — одна PostgreSQL, несколько баз данных (рекомендуется для учебного проекта)
+
+```text
+postgres
+
+├── user_db
+├── driver_db
+├── ride_db
+├── payment_db
+├── geo_db
+└── rating_db
+```
+
+Это проще в настройке и обслуживании.
+
+### Вариант 2 — отдельный контейнер PostgreSQL на каждый сервис
+
+```text
+postgres-user
+postgres-driver
+postgres-ride
+postgres-payment
+...
+```
+
+Такой подход обеспечивает максимальную изоляцию, но увеличивает потребление ресурсов и сложность.
+
+## Kafka
+
+Kafka обычно запускается как отдельный контейнер (или несколько контейнеров в кластере для production).
+
+Все сервисы подключаются к ней по внутреннему адресу Docker-сети:
+
+```text
+user-service
+       │
+driver-service
+       │
+ride-service
+       │
+dispatch-service
+       │
+       ▼
+     Kafka
+```
+
+## Общая сеть
+
+Все контейнеры находятся в одной сети Docker Compose и обращаются друг к другу по имени сервиса:
+
+```python
+DATABASE_URL = "postgresql+asyncpg://user:pass@postgres:5432/user_db"
+
+KAFKA_BOOTSTRAP = "kafka:9092"
+
+REDIS_URL = "redis://redis:6379"
+
+NOTIFICATION_URL = "http://notification-service:8000"
+```
+
+Не нужны IP-адреса — Docker автоматически предоставляет DNS-резолвинг по именам сервисов.
+
+### Что я бы рекомендовал
+
+Для такого проекта использовать **около 15–20 контейнеров**:
+
+* 1 × Nginx
+* 1 × API Gateway
+* 9 × бизнес-сервисов
+* 1 × WebSocket Service
+* 1 × Kafka
+* 1 × PostgreSQL
+* 1 × Redis
+* 1 × Prometheus
+* 1 × Grafana
+* 1 × OpenTelemetry Collector
+
+Kafka-консьюмеры можно сначала запускать **внутри соответствующих сервисов** как фоновые асинхронные задачи. Если позже появится высокая нагрузка или необходимость независимо масштабировать обработку событий, их можно вынести в отдельные контейнеры-воркеры. Такой путь позволяет сохранить архитектуру простой на старте и при этом не ограничивает дальнейшее развитие.
+
+
 # ------------------------------------------------------------------------------
+## Вопрос 5
+
+<a id="вопрос-5"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> Дай мне 2 варианта docker.
+> 1) для MVP
+> 2) Для продакшн
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+Хороший вопрос. Для MVP и Production архитектуры действительно должны отличаться. Я бы предложил следующие варианты.
+
+---
+
+# Вариант 1. MVP
+
+Задача:
+
+* быстро разработать;
+* легко запускать;
+* минимум контейнеров;
+* сохранить правильную архитектуру.
+
+## Контейнеры
+
+```text
+Internet
+    │
+ Nginx
+    │
+API Gateway
+    │
+──────────────────────────────────────
+
+User Service
+
+Driver Service
+
+Ride Service
+
+Dispatch Service
+
+Geo Service
+
+Pricing Service
+
+Notification Service
+
+Payment Service
+
+Rating Service
+
+WebSocket Service
+
+──────────────────────────────────────
+
+Kafka
+
+PostgreSQL
+
+──────────────────────────────────────
+```
+
+Всего примерно
+
+```text
+12 контейнеров
+```
+
+### Особенность MVP
+
+Kafka Worker **не отдельный контейнер**.
+
+Например
+
+```
+Ride Service
+
+├── HTTP API
+├── Kafka Producer
+└── Kafka Consumer
+```
+
+То есть один процесс FastAPI:
+
+```
+startup()
+
+↓
+
+запускает HTTP
+
+↓
+
+запускает Kafka Consumer
+
+↓
+
+оба работают через asyncio
+```
+
+Это абсолютно нормально.
+
+Например
+
+```python
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(kafka_consumer())
+```
+
+То есть
+
+```
+Ride Service
+
+HTTP
+
++
+
+Kafka Consumer
+
++
+
+Kafka Producer
+```
+
+в одном контейнере.
+
+Это значительно проще.
+
+---
+
+## PostgreSQL
+
+Один контейнер.
+
+Внутри несколько БД.
+
+```
+postgres
+
+user_db
+
+driver_db
+
+ride_db
+
+payment_db
+
+rating_db
+```
+
+---
+
+## Redis
+
+Пока отсутствует.
+
+---
+
+## Celery
+
+Отсутствует.
+
+---
+
+## Prometheus
+
+Нет.
+
+---
+
+## Grafana
+
+Нет.
+
+---
+
+## OpenTelemetry
+
+Нет.
+
+---
+
+# Docker Compose MVP
+
+```
+nginx
+
+gateway
+
+user-service
+
+driver-service
+
+ride-service
+
+dispatch-service
+
+geo-service
+
+pricing-service
+
+payment-service
+
+notification-service
+
+rating-service
+
+websocket-service
+
+kafka
+
+postgres
+```
+
+Всего
+
+```
+≈14 контейнеров
+```
+
+---
+
+# Вариант 2. Production
+
+Теперь разделяем всё.
+
+Каждый сервис отвечает только за HTTP.
+
+Kafka Worker становится отдельным приложением.
+
+---
+
+## Архитектура
+
+```
+                 Internet
+                      │
+                  Nginx
+                      │
+                API Gateway
+                      │
+
+────────────────────────────────────────────
+
+User API
+Driver API
+Ride API
+Dispatch API
+Geo API
+Pricing API
+Payment API
+Notification API
+Rating API
+WebSocket API
+
+────────────────────────────────────────────
+
+Kafka Workers
+
+User Worker
+Driver Worker
+Ride Worker
+Dispatch Worker
+Geo Worker
+Pricing Worker
+Payment Worker
+Notification Worker
+Rating Worker
+
+────────────────────────────────────────────
+
+Kafka Cluster
+
+────────────────────────────────────────────
+
+Redis Cluster
+
+────────────────────────────────────────────
+
+PostgreSQL
+
+────────────────────────────────────────────
+
+Celery Workers
+
+────────────────────────────────────────────
+
+Prometheus
+
+Grafana
+
+OpenTelemetry Collector
+```
+
+---
+
+## Контейнеров становится больше
+
+```
+Nginx
+
+Gateway
+
+9 API
+
+9 Kafka Workers
+
+Kafka
+
+Redis
+
+PostgreSQL
+
+Celery
+
+Prometheus
+
+Grafana
+
+OTel Collector
+```
+
+Итого
+
+```
+около 28 контейнеров
+```
+
+---
+
+## Почему Kafka Worker отдельно
+
+Представим
+
+100 000 поездок.
+
+Ride Service почти не загружен.
+
+Dispatch перегружен.
+
+Тогда можно сделать
+
+```
+Dispatch API
+
+1 контейнер
+```
+
+но
+
+```
+Dispatch Worker
+
+10 контейнеров
+```
+
+Kafka сама распределит сообщения между ними.
+
+---
+
+## Redis
+
+Теперь активно используется.
+
+```
+online drivers
+
+driver locations
+
+JWT blacklist
+
+cache
+
+sessions
+
+rate limit
+
+pub/sub
+```
+
+---
+
+## Celery
+
+Используется отдельно.
+
+```
+emails
+
+sms
+
+cleanup
+
+analytics
+
+reports
+
+scheduled jobs
+```
+
+---
+
+## PostgreSQL
+
+В production есть два подхода.
+
+### Вариант А
+
+Один PostgreSQL.
+
+Несколько баз.
+
+```
+postgres
+
+user_db
+
+driver_db
+
+ride_db
+
+payment_db
+```
+
+Используют большинство стартапов.
+
+---
+
+### Вариант Б
+
+Каждый сервис имеет собственную PostgreSQL.
+
+```
+postgres-user
+
+postgres-driver
+
+postgres-ride
+
+postgres-payment
+```
+
+Так делают крупные компании.
+
+---
+
+# Сравнение
+
+| Компонент       | MVP            | Production       |
+| --------------- | -------------- | ---------------- |
+| FastAPI         | ✅              | ✅                |
+| Kafka           | ✅              | ✅                |
+| Kafka Consumer  | внутри сервиса | отдельный Worker |
+| PostgreSQL      | 1 контейнер    | 1 или несколько  |
+| Redis           | ❌              | ✅                |
+| Celery          | ❌              | ✅                |
+| WebSocket       | ✅              | ✅                |
+| Prometheus      | ❌              | ✅                |
+| Grafana         | ❌              | ✅                |
+| OpenTelemetry   | ❌              | ✅                |
+| Масштабирование | ограниченное   | горизонтальное   |
+| Контейнеров     | ~14            | ~25–30           |
+
+## Что я рекомендую
+
+Я бы выбрал **гибридный путь**:
+
+1. Начать с MVP, где **каждый бизнес-сервис — это один контейнер**, внутри которого работают:
+
+   * FastAPI (HTTP API);
+   * Kafka producer;
+   * Kafka consumer (как фоновая асинхронная задача).
+
+2. Когда система станет стабильной и появится реальная необходимость в независимом масштабировании, **не переписывать сервисы**, а вынести Kafka-консьюмеров в отдельные контейнеры-воркеры. Код обработки событий при этом останется тем же — изменится только способ запуска.
+
+Такой подход сохраняет простоту разработки на старте и при этом естественно эволюционирует в полноценную production-архитектуру без радикальных изменений.
+
+# ------------------------------------------------------------------------------
+
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+
+# ------------------------------------------------------------------------------
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+# ------------------------------------------------------------------------------
+
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+
+# ------------------------------------------------------------------------------
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+# ------------------------------------------------------------------------------
+
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+
+# ------------------------------------------------------------------------------
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+# ------------------------------------------------------------------------------
+
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+
+# ------------------------------------------------------------------------------
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+# ------------------------------------------------------------------------------
+
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+
+# ------------------------------------------------------------------------------
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+# ------------------------------------------------------------------------------
+
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+
+# ------------------------------------------------------------------------------
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+# ------------------------------------------------------------------------------
+
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+
+# ------------------------------------------------------------------------------
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+# ------------------------------------------------------------------------------
+
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
+
+# ------------------------------------------------------------------------------
+## Вопрос 1
+
+<a id="вопрос-1"></a>
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
