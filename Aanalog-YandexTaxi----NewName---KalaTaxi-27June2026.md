@@ -3,6 +3,8 @@
 > можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
 
 # answer:
+![Question](https://img.shields.io/badge/QUESTION-blue)
+![Answer](https://img.shields.io/badge/ANSWER-green)
 Да. **Можно написать систему уровня MVP (минимально жизнеспособный продукт) наподобие Yandex Taxi**, используя только:
 
 * Python
