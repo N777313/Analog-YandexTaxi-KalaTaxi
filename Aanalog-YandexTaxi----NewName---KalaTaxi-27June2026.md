@@ -1,4 +1,4 @@
-# можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+# <font color="blue">можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.</font>
 
 # answer:
 Да. **Можно написать систему уровня MVP (минимально жизнеспособный продукт) наподобие Yandex Taxi**, используя только:
