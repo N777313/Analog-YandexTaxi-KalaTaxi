@@ -1804,25 +1804,1037 @@ postgres-payment
 
 # ------------------------------------------------------------------------------
 
-## Вопрос 1
+## Вопрос 6
 
-<a id="вопрос-1"></a>
+<a id="вопрос-6"></a>
 
 > ![Question](https://img.shields.io/badge/QUESTION-blue)
 >
-> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+> Напиши мне полный ТЗ всего что мы тут обсудили чтобы я сразу мог это все реализовать.
 
 ![Answer](https://img.shields.io/badge/ANSWER-green)
 
+Ниже полноценное **Техническое Задание (ТЗ)** на разработку backend-системы такси уровня MVP → Production. Его можно использовать как план реализации.
+
+---
+
+# Техническое задание
+
+# Проект: Ride Platform (аналог Taxi Backend)
+
+## 1. Цель проекта
+
+Разработать масштабируемую асинхронную backend-платформу для сервиса заказа поездок.
+
+Система должна поддерживать:
+
+* пассажиров;
+* водителей;
+* автомобили;
+* создание поездок;
+* поиск водителей;
+* назначение заказа;
+* отслеживание поездки;
+* расчёт стоимости;
+* оплату;
+* уведомления;
+* рейтинги.
+
+Архитектура должна позволять переход от MVP к Production без переписывания системы.
+
+---
+
+# 2. Основной стек
+
+## Backend
+
+* Python 3.13+
+* FastAPI
+* asyncio
+* SQLAlchemy 2.0 async
+* Alembic
+* Pydantic v2
+
+## Базы данных
+
+* PostgreSQL
+* asyncpg
+
+## Messaging
+
+* Apache Kafka
+* aiokafka
+
+## Cache
+
+* Redis
+
+## Background Tasks
+
+* Celery
+
+## Infrastructure
+
+* Docker
+* Docker Compose
+* Nginx
+
+## Realtime
+
+* WebSocket
+
+## Monitoring
+
+* Prometheus
+* Grafana
+
+## Tracing
+
+* OpenTelemetry
+
+---
+
+# 3. Архитектурный стиль
+
+Использовать:
+
+* Microservices Architecture
+* Event Driven Architecture
+* Async First
+* Domain Driven Design
+
+Принцип:
+
+```
+HTTP используется только для запросов клиента
+
+Kafka используется для общения сервисов
+```
+
+---
+
+# 4. Общая архитектура
+
+```
+                 CLIENTS
+
+        Passenger App
+        Driver App
+
+
+              |
+              |
+
+            NGINX
+
+              |
+
+        API GATEWAY
+
+              |
+
+================================================
+
+ User Service
+
+ Driver Service
+
+ Ride Service
+
+ Dispatch Service
+
+ Geo Service
+
+ Pricing Service
+
+ Payment Service
+
+ Notification Service
+
+ Rating Service
+
+ WebSocket Service
+
+
+================================================
+
+              Kafka
+
+
+================================================
+
+ PostgreSQL
+
+ Redis
+
+ Celery
+
+ Prometheus
+
+ Grafana
+
+ OpenTelemetry
+
+```
+
+---
+
+# 5. Сервисы
+
+# 5.1 API Gateway
+
+Назначение:
+
+Единая точка входа.
+
+Функции:
+
+* routing
+* JWT проверка
+* rate limit
+* CORS
+* logging
+
+Не содержит бизнес-логики.
+
+Endpoints:
+
+```
+/api/v1/users/*
+/api/v1/drivers/*
+/api/v1/rides/*
+```
+
+---
+
+# 5.2 User Service
+
+Ответственность:
+
+Пассажиры.
+
+Модель User:
+
+```
+id UUID
+
+phone
+
+email
+
+password_hash
+
+first_name
+
+last_name
+
+created_at
+```
+
+Endpoints:
+
+```
+POST /register
+
+POST /login
+
+POST /refresh
+
+GET /profile
+
+PUT /profile
+```
+
+Kafka events:
+
+Producer:
+
+```
+UserCreated
+
+UserUpdated
+```
+
+---
+
+# 5.3 Driver Service
+
+Ответственность:
+
+Водители.
+
+Models:
+
+Driver
+
+```
+id
+
+user_id
+
+status
+
+rating
+
+created_at
+```
+
+Car
+
+```
+id
+
+driver_id
+
+brand
+
+model
+
+color
+
+number
+```
+
+Статусы:
+
+```
+ONLINE
+
+OFFLINE
+
+BUSY
+
+BLOCKED
+```
+
+Endpoints:
+
+```
+POST /driver/register
+
+POST /driver/status
+
+GET /driver/profile
+```
+
+Events:
+
+Producer:
+
+```
+DriverOnline
+
+DriverOffline
+
+DriverUpdated
+```
+
+---
+
+# 5.4 Geo Service
+
+Ответственность:
+
+Геолокация.
+
+Использует:
+
+Redis
+
+Хранение:
+
+```
+driver_id
+
+latitude
+
+longitude
+
+timestamp
+```
+
+Endpoints:
+
+```
+POST /location
+
+GET /nearby
+```
+
+Events:
+
+```
+DriverLocationUpdated
+```
+
+---
+
+# 5.5 Ride Service
+
+Главный сервис.
+
+Модель:
+
+Ride
+
+```
+id
+
+passenger_id
+
+driver_id
+
+from_lat
+
+from_lon
+
+to_lat
+
+to_lon
+
+price
+
+status
+
+created_at
+```
+
+Статусы:
+
+```
+CREATED
+
+SEARCHING
+
+FOUND
+
+ACCEPTED
+
+STARTED
+
+FINISHED
+
+CANCELLED
+```
+
+Endpoints:
+
+Создание:
+
+```
+POST /rides
+```
+
+Получение:
+
+```
+GET /rides/{id}
+```
+
+Отмена:
+
+```
+POST /rides/{id}/cancel
+```
+
+Events:
+
+Producer:
+
+```
+RideCreated
+
+RideAccepted
+
+RideFinished
+```
+
+---
+
+# 5.6 Dispatch Service
+
+Отвечает за поиск водителя.
+
+Алгоритм:
+
+Получить:
+
+```
+RideCreated
+```
+
+Дальше:
+
+```
+Geo Service
+
+↓
+
+список ближайших водителей
+
+↓
+
+отправить предложение
+
+↓
+
+ждать ответ
+
+↓
+
+назначить
+```
+
+Events:
+
+```
+DriverAssigned
+```
+
+---
+
+# 5.7 Pricing Service
+
+Расчёт цены.
+
+Формула:
+
+```
+price =
+base_price
++
+distance * km_price
++
+time * minute_price
++
+surge
+```
+
+Получает:
+
+```
+RideCreated
+```
+
+Возвращает:
+
+```
+PriceCalculated
+```
+
+---
+
+# 5.8 Payment Service
+
+Ответственность:
+
+Оплата.
+
+Models:
+
+Payment
+
+```
+id
+
+ride_id
+
+amount
+
+status
+
+created_at
+```
+
+Статусы:
+
+```
+PENDING
+
+SUCCESS
+
+FAILED
+```
+
+Events:
+
+```
+PaymentCompleted
+```
+
+---
+
+# 5.9 Notification Service
+
+Отвечает за:
+
+* push
+* websocket
+* email
+
+Kafka:
+
+Получает:
+
+```
+DriverAssigned
+
+RideUpdated
+
+PaymentCompleted
+```
+
+---
+
+# 5.10 Rating Service
+
+После поездки.
+
+Models:
+
+Rating
+
+```
+ride_id
+
+from_user
+
+to_user
+
+score
+
+comment
+```
+
+Events:
+
+```
+RatingCreated
+```
+
+---
+
+# 5.11 WebSocket Service
+
+Назначение:
+
+Realtime.
+
+Channels:
+
+```
+/ws/passenger/{id}
+
+/ws/driver/{id}
+```
+
+Получает события Kafka.
+
+Например:
+
+Kafka:
+
+```
+DriverLocationUpdated
+```
+
+Отправляет:
+
+```
+client
+```
+
+---
+
+# 6. Kafka Topics
+
+Создать:
+
+```
+users
+
+
+drivers
+
+
+locations
+
+
+rides.created
+
+rides.updated
+
+rides.finished
+
+
+driver.assigned
+
+
+pricing
+
+
+payments
+
+
+notifications
+
+
+ratings
+```
+
+---
+
+# 7. MVP Docker
+
+Контейнеры:
+
+```
+nginx
+
+api-gateway
+
+user-service
+
+driver-service
+
+ride-service
+
+dispatch-service
+
+geo-service
+
+pricing-service
+
+payment-service
+
+notification-service
+
+rating-service
+
+websocket-service
+
+
+kafka
+
+postgres
+```
+
+---
+
+# 8. Production Docker
+
+Добавить:
+
+```
+redis
+
+
+celery-worker
+
+
+prometheus
+
+grafana
+
+
+otel-collector
+```
+
+Kafka workers:
+
+```
+user-worker
+
+driver-worker
+
+ride-worker
+
+dispatch-worker
+
+geo-worker
+
+payment-worker
+
+notification-worker
+```
+
+---
+
+# 9. Database Design
+
+MVP:
+
+один PostgreSQL.
+
+Базы:
+
+```
+user_db
+
+driver_db
+
+ride_db
+
+payment_db
+
+rating_db
+```
+
+---
+
+Production:
+
+Каждый сервис:
+
+своя БД.
+
+---
+
+# 10. Async требования
+
+Все должно быть async.
+
+Запрещено:
+
+```
+requests
+psycopg2
+blocking IO
+```
+
+Использовать:
+
+HTTP:
+
+```
+httpx.AsyncClient
+```
+
+Postgres:
+
+```
+asyncpg
+```
+
+Kafka:
+
+```
+aiokafka
+```
+
+Redis:
+
+```
+redis.asyncio
+```
+
+---
+
+# 11. Структура каждого сервиса
+
+Пример:
+
+```
+ride-service/
+
+
+app/
+
+ ├── main.py
+
+ ├── api/
+
+ │    └── routes.py
+
+
+ ├── domain/
+
+ │    ├── models.py
+
+ │    └── schemas.py
+
+
+ ├── services/
+
+ │    └── ride_service.py
+
+
+ ├── repositories/
+
+ │    └── ride_repository.py
+
+
+ ├── kafka/
+
+ │    ├── producer.py
+
+ │    └── consumer.py
+
+
+ ├── database/
+
+ │    └── session.py
+
+
+ └── config.py
+```
+
+---
+
+# 12. Логирование
+
+JSON logs:
+
+```
+timestamp
+
+service
+
+trace_id
+
+request_id
+
+level
+
+message
+```
+
+---
+
+# 13. Monitoring
+
+Prometheus metrics:
+
+Каждый сервис:
+
+```
+/metrics
+```
+
+Метрики:
+
+```
+http_requests_total
+
+request_latency
+
+kafka_messages
+
+errors_total
+```
+
+---
+
+# 14. OpenTelemetry
+
+Трассировать:
+
+```
+Client
+
+↓
+
+Gateway
+
+↓
+
+Ride Service
+
+↓
+
+Kafka
+
+↓
+
+Dispatch
+
+↓
+
+Notification
+
+↓
+
+Client
+```
+
+---
+
+# 15. Порядок реализации
+
+## Sprint 1
+
+Infrastructure:
+
+* Docker
+* Nginx
+* PostgreSQL
+* Kafka
+
+## Sprint 2
+
+User Service
+
+## Sprint 3
+
+Driver Service
+
+## Sprint 4
+
+Ride Service
+
+## Sprint 5
+
+Dispatch + Geo
+
+## Sprint 6
+
+WebSocket
+
+## Sprint 7
+
+Pricing + Payment
+
+## Sprint 8
+
+Notification + Rating
+
+## Sprint 9
+
+Redis
+
+## Sprint 10
+
+Monitoring
+
+## Sprint 11
+
+Production deployment
+
+---
+
+# Финальная цель
+
+Получить систему:
+
+* полностью async;
+* event-driven;
+* масштабируемую;
+* с микросервисами;
+* с realtime;
+* с мониторингом;
+* готовую к дальнейшему росту.
+
+Это ТЗ уже достаточно детальное, чтобы сразу создавать репозиторий и начинать писать код.
+
 
 # ------------------------------------------------------------------------------
-## Вопрос 1
+## Вопрос 7
 
-<a id="вопрос-1"></a>
+<a id="вопрос-7"></a>
 
 > ![Question](https://img.shields.io/badge/QUESTION-blue)
 >
-> можно ли написать Yandex Taxi имея только python fastapi и kafka, postgres и все библеотеки python.
+> 
 
 ![Answer](https://img.shields.io/badge/ANSWER-green)
 
