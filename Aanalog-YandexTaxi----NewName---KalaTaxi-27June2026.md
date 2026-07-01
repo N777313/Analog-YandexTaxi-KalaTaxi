@@ -171,11 +171,14 @@ Notification Service
 
 
 # ------------------------------------------------------------------------------
-Стэк будем использовать: python FastAPI, Kafka + Kafka Workers, PostgreSQL, Docker, Nginx, WebSocket.
-После надо добавить Celery, Prometheus + Grafana, OpenTelemetry, Redis.
+
+> ![Question](https://img.shields.io/badge/QUESTION-blue)
+>
+> Стэк будем использовать: python FastAPI, Kafka + Kafka Workers, PostgreSQL, Docker, Nginx, WebSocket. После надо добавить Celery, Prometheus + Grafana, OpenTelemetry, Redis.
 
 
-# answer:
+![Answer](https://img.shields.io/badge/ANSWER-green)
+
 
 Это вполне разумный план. Более того, если делать проект как учебный или портфолио, то лучше **не пытаться сразу добавить весь стек**, а развивать его поэтапно.
 
